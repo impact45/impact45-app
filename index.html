@@ -3044,15 +3044,26 @@ function openFotoAnalyse(){
 function sluitFotoModal(){document.getElementById('fotoModal').style.display='none';}
 function verwerkFoto(input){
   const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    fotoBase64=e.target.result.split(',')[1];
-    document.getElementById('fotoImg').src=e.target.result;
+  const img=new Image();
+  const url=URL.createObjectURL(file);
+  img.onload=()=>{
+    // Comprimeer naar max 800px breed en JPEG quality 0.7
+    const canvas=document.createElement('canvas');
+    const maxW=800;
+    const scale=img.width>maxW?maxW/img.width:1;
+    canvas.width=Math.round(img.width*scale);
+    canvas.height=Math.round(img.height*scale);
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    const dataUrl=canvas.toDataURL('image/jpeg',0.7);
+    fotoBase64=dataUrl.split(',')[1];
+    document.getElementById('fotoImg').src=dataUrl;
     document.getElementById('fotoPreview').style.display='block';
     document.getElementById('fotoAnalyseBtn').style.display='block';
     document.getElementById('fotoResultaat').style.display='none';
+    URL.revokeObjectURL(url);
   };
-  reader.readAsDataURL(file);
+  img.src=url;
 }
 async function analyseerFoto(){
   if(!fotoBase64){showToast('Kies eerst een foto');return;}
