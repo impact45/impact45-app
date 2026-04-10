@@ -3070,24 +3070,30 @@ async function analyseerFoto(){
   if(!fotoBase64){showToast('Kies eerst een foto');return;}
   const btn=document.getElementById('fotoAnalyseBtn');
   const res=document.getElementById('fotoResultaat');
-  btn.textContent='⏳ Analyseren...';btn.disabled=true;res.style.display='none';
+  btn.textContent='⏳ Analyseren... (30-60 sec)';btn.disabled=true;res.style.display='none';
   try{
+    const controller=new AbortController();
+    const tid=setTimeout(()=>controller.abort(),90000);
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
+      method:'POST',signal:controller.signal,
       headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:2000,
+        model:'claude-sonnet-4-20250514',max_tokens:800,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:'image/jpeg',data:fotoBase64}},
-          {type:'text',text:'Je bent een voedingsexpert. Analyseer dit bord eten. Geef ALLEEN een JSON object terug, geen uitleg of backticks:\n{"gerechten":[{"naam":"naam","portie_g":200,"kcal":350,"eiwit_g":25,"koolh_g":30,"vet_g":12}],"totaal":{"kcal":350,"eiwit_g":25,"koolh_g":30,"vet_g":12},"notitie":"opmerking"}'}
+          {type:'text',text:'Analyseer dit eten. Geef ALLEEN dit JSON terug zonder uitleg of backticks:\n{"gerechten":[{"naam":"naam","portie_g":150,"kcal":300,"eiwit_g":20,"koolh_g":25,"vet_g":10}],"totaal":{"kcal":300,"eiwit_g":20,"koolh_g":25,"vet_g":10},"notitie":"opmerking"}'}
         ]}]
       })
     });
+    clearTimeout(tid);
+    if(!resp.ok)throw new Error('API fout: '+resp.status);
     const data=await resp.json();
     const tekst=((data.content&&data.content[0])?data.content[0].text:'')||'';
-    const analyse=JSON.parse(tekst.replace(/```json|```/g,'').trim());
-    const t=analyse.totaal||{};
-    const g=analyse.gerechten||[];
+    if(!tekst)throw new Error('Lege response');
+    const m=tekst.match(/\{[\s\S]*\}/);
+    if(!m)throw new Error('Geen JSON in response');
+    const analyse=JSON.parse(m[0]);
+    const t=analyse.totaal||{};const g=analyse.gerechten||[];
     res.innerHTML=`<div style="background:linear-gradient(135deg,#0d2424,#000);border:1px solid var(--teal-glow);border-radius:16px;padding:18px;margin-bottom:12px">
       <div style="font-size:10px;color:var(--teal);font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">📊 Analyse resultaat</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
@@ -3096,20 +3102,21 @@ async function analyseerFoto(){
         <div style="text-align:center;background:rgba(255,255,255,.06);border-radius:10px;padding:10px 4px"><div style="font-size:18px;font-weight:900;color:#ffb74d">${t.koolh_g||0}g</div><div style="font-size:9px;color:var(--muted);font-weight:700">KOOLH.</div></div>
         <div style="text-align:center;background:rgba(255,255,255,.06);border-radius:10px;padding:10px 4px"><div style="font-size:18px;font-weight:900;color:#ef9a9a">${t.vet_g||0}g</div><div style="font-size:9px;color:var(--muted);font-weight:700">VET</div></div>
       </div>
-      ${g.map(gr=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)"><div><div style="font-size:12px;font-weight:700">${gr.naam}</div><div style="font-size:10px;color:var(--muted)">~${gr.portie_g}g · E:${gr.eiwit_g}g K:${gr.koolh_g}g V:${gr.vet_g}g</div></div><div style="font-size:14px;font-weight:900;color:var(--teal)">${gr.kcal} kcal</div></div>`).join('')}
+      ${g.map(gr=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)"><div><div style="font-size:12px;font-weight:700;color:#fff">${gr.naam}</div><div style="font-size:10px;color:var(--muted)">~${gr.portie_g}g · E:${gr.eiwit_g}g K:${gr.koolh_g}g V:${gr.vet_g}g</div></div><div style="font-size:14px;font-weight:900;color:var(--teal)">${gr.kcal} kcal</div></div>`).join('')}
       ${analyse.notitie?`<div style="margin-top:10px;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:8px;font-size:11px;color:rgba(255,255,255,.6)">💡 ${analyse.notitie}</div>`:''}
     </div>
-    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:12px">Schatting ±15-20%. Pas aan indien nodig.</div>
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:12px">Schatting ±15-20%</div>
     ${g.map((gr,i)=>`<button onclick="logFotoGerecht(${i})" style="width:100%;padding:11px;background:var(--gray);border:1px solid var(--gray3);border-radius:10px;color:var(--white);font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-align:left;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span>➕ ${gr.naam}</span><span style="color:var(--teal);font-weight:900">${gr.kcal} kcal</span></button>`).join('')}
     <button onclick="logAlleGerechten()" style="width:100%;padding:14px;background:var(--teal);color:var(--black);border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:900;text-transform:uppercase;cursor:pointer;margin-top:4px">✓ Log gehele maaltijd (${t.kcal} kcal)</button>`;
-    res.style.display='block';
-    res._analyse=analyse;
+    res.style.display='block';res._analyse=analyse;
   }catch(err){
-    res.innerHTML=`<div style="background:rgba(220,50,50,.1);border:1px solid rgba(220,50,50,.3);border-radius:12px;padding:16px;text-align:center"><div style="font-size:24px;margin-bottom:8px">⚠️</div><div style="font-size:12px;font-weight:700;color:var(--danger)">Analyse mislukt</div><div style="font-size:11px;color:var(--muted);margin-top:6px">${err.message||'Probeer opnieuw'}</div></div>`;
+    const msg=err.name==='AbortError'?'Timeout — probeer opnieuw':err.message||'Probeer opnieuw';
+    res.innerHTML=`<div style="background:rgba(220,50,50,.1);border:1px solid rgba(220,50,50,.3);border-radius:12px;padding:16px;text-align:center"><div style="font-size:24px;margin-bottom:8px">⚠️</div><div style="font-size:12px;font-weight:700;color:var(--danger)">Analyse mislukt</div><div style="font-size:11px;color:var(--muted);margin-top:6px">${msg}</div></div>`;
     res.style.display='block';
   }
   btn.textContent='🔍 Opnieuw analyseren';btn.disabled=false;
 }
+
 function logFotoGerecht(i){
   const analyse=document.getElementById('fotoResultaat')._analyse;
   if(!(analyse&&analyse.gerechten)[i])return;
