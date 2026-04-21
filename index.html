@@ -3073,26 +3073,16 @@ async function analyseerFoto(){
   btn.textContent='⏳ Analyseren... (30-60 sec)';btn.disabled=true;res.style.display='none';
   try{
     const controller=new AbortController();
-    const tid=setTimeout(()=>controller.abort(),90000);
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const tid=setTimeout(()=>controller.abort(),60000);
+    const resp=await fetch('/api/analyze-food',{
       method:'POST',signal:controller.signal,
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:800,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:fotoBase64}},
-          {type:'text',text:'Analyseer dit eten. Geef ALLEEN dit JSON terug zonder uitleg of backticks:\n{"gerechten":[{"naam":"naam","portie_g":150,"kcal":300,"eiwit_g":20,"koolh_g":25,"vet_g":10}],"totaal":{"kcal":300,"eiwit_g":20,"koolh_g":25,"vet_g":10},"notitie":"opmerking"}'}
-        ]}]
-      })
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:fotoBase64})
     });
     clearTimeout(tid);
-    if(!resp.ok)throw new Error('API fout: '+resp.status);
     const data=await resp.json();
-    const tekst=((data.content&&data.content[0])?data.content[0].text:'')||'';
-    if(!tekst)throw new Error('Lege response');
-    const m=tekst.match(/\{[\s\S]*\}/);
-    if(!m)throw new Error('Geen JSON in response');
-    const analyse=JSON.parse(m[0]);
+    if(!resp.ok)throw new Error(data.error||'Server fout: '+resp.status);
+    const analyse=data;
     const t=analyse.totaal||{};const g=analyse.gerechten||[];
     res.innerHTML=`<div style="background:linear-gradient(135deg,#0d2424,#000);border:1px solid var(--teal-glow);border-radius:16px;padding:18px;margin-bottom:12px">
       <div style="font-size:10px;color:var(--teal);font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">📊 Analyse resultaat</div>
